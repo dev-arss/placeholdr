@@ -1,151 +1,142 @@
-require("dotenv").config();
 const express = require('express');
-const { createCanvas, registerFont } = require('canvas');
+const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-
-// Register Bell MT font if available
-registerFont('./fonts/bell-mt.ttf', { family: 'Bell MT' });
+const { z } = require('zod');
+require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
-const apiKey = process.env.API_KEY
 
-app.use(express.json());
+// Security middleware
+app.use(helmet());
+app.disable('x-powered-by');
+app.use(express.json({ limit: '10kb' }));
 
-// 1. Rate Limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50,
+// Rate limiter
+app.use(rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20,
   standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests. Try again later.' }
-});
-app.use(limiter);
+  legacyHeaders: false
+}));
 
-// 2. Block all non-POST (except '/')
-app.use((req, res, next) => {
-  if (req.path !== '/' && req.method !== 'POST') {
-    return res.status(403).json({ error: 'Forbidden' });
+// Font loading
+const fontRegular = fs.readFileSync(path.join(__dirname, 'fonts', 'bell-mt.ttf')).toString('base64');
+const fontBold = fs.readFileSync(path.join(__dirname, 'fonts', 'bell-mt-bold.ttf')).toString('base64');
+const fontItalic = fs.readFileSync(path.join(__dirname, 'fonts', 'bell-mt-italic.ttf')).toString('base64');
+
+const fontStyleBlock = `
+<style>
+  @font-face {
+    font-family: "Bell MT";
+    src: url("data:font/ttf;base64,${fontRegular}") format("truetype");
+    font-weight: normal;
+    font-style: normal;
   }
-  next();
+  @font-face {
+    font-family: "Bell MT";
+    src: url("data:font/ttf;base64,${fontBold}") format("truetype");
+    font-weight: bold;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: "Bell MT";
+    src: url("data:font/ttf;base64,${fontItalic}") format("truetype");
+    font-weight: normal;
+    font-style: italic;
+  }
+</style>
+`;
+
+// Input schema using Zod
+const schema = z.object({
+  bgColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  fontSize: z.number().min(1).max(200).optional(),
+  fontFamily: z.string().optional(),
+  width: z.number().min(1).max(2000),
+  height: z.number().min(1).max(2000),
+  format: z.enum(['svg', 'png', 'jpg', 'jpeg']).optional(),
+  filename: z.string().optional(),
+  texts: z.array(z.object({
+    content: z.string().min(1).max(1000),
+    x: z.string().optional(),
+    y: z.string().optional()
+  }))
 });
 
-// 3. API Key Middleware
-app.post('/generate', (req, res, next) => {
-  const userKey = req.headers['x-api-key'];
-  if (!userKey || userKey !== apiKey) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-}, (req, res) => {
+// Decode entities and handle formatting
+function decodeEntities(text) {
+  return text
+    .replace(/&mdash;/g, '—')
+    .replace(/&ldquo;/g, '“')
+    .replace(/&rdquo;/g, '”')
+    .replace(/<em>(.*?)<\/em>/g, '<tspan font-style="italic">$1</tspan>')
+    .replace(/<strong>(.*?)<\/strong>/g, '<tspan font-weight="bold">$1</tspan>');
+}
+
+app.post('/generate', async (req, res) => {
+  let parsed;
   try {
-    const {
-      texts = [],
-      bgColor = '#ffffff',
-      width = 800,
-      height = 400,
-      format = 'svg',
-      filename = 'image'
-    } = req.body;
-
-    const safeWidth = Math.min(width, 1000);
-    const safeHeight = Math.min(height, 1000);
-    const isSVG = format.toLowerCase() === 'svg';
-
-    const canvas = createCanvas(safeWidth, safeHeight, isSVG ? 'svg' : undefined);
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, safeWidth, safeHeight);
-
-    const padding = 20;
-
-    texts.forEach((textBlock) => {
-      const {
-        text = '',
-        fontFamily = 'Arial',
-        fontSize = 24,
-        textColor = '#000000',
-        placement = 'center'
-      } = textBlock;
-
-      const safeFontSize = Math.min(Math.max(fontSize, 8), 72);
-      const lines = typeof text === 'string' ? text.split(/<br\s*\/?>/i) : text;
-      const lineHeight = safeFontSize * 1.2;
-      const textHeight = lines.length * lineHeight;
-
-      ctx.font = `${safeFontSize}px ${fontFamily}`;
-      ctx.fillStyle = textColor;
-
-      let x = 0, y = 0;
-
-      switch (placement) {
-        case 'top-left':
-          x = padding;
-          y = padding + safeFontSize;
-          ctx.textAlign = 'left';
-          break;
-        case 'top-right':
-          x = safeWidth - padding;
-          y = padding + safeFontSize;
-          ctx.textAlign = 'right';
-          break;
-        case 'bottom-left':
-          x = padding;
-          y = safeHeight - textHeight - padding + safeFontSize;
-          ctx.textAlign = 'left';
-          break;
-        case 'bottom-right':
-          x = safeWidth - padding;
-          y = safeHeight - textHeight - padding + safeFontSize;
-          ctx.textAlign = 'right';
-          break;
-        case 'center':
-        default:
-          x = safeWidth / 2;
-          y = (safeHeight - textHeight) / 2 + safeFontSize;
-          ctx.textAlign = 'center';
-          break;
-      }
-
-      lines.forEach((line, i) => {
-        ctx.fillText(line, x, y + i * lineHeight);
-      });
-    });
-
-    let contentType = '';
-    let ext = format.toLowerCase();
-    let buffer;
-
-    if (ext === 'svg') {
-      contentType = 'image/svg+xml';
-      buffer = canvas.toBuffer('image/svg+xml');
-    } else if (ext === 'jpeg' || ext === 'jpg') {
-      contentType = 'image/jpeg';
-      ext = 'jpg';
-      buffer = canvas.toBuffer('image/jpeg');
-    } else if (ext === 'png') {
-      contentType = 'image/png';
-      ext = 'png';
-      buffer = canvas.toBuffer('image/png');
-    } else {
-      contentType = 'image/svg+xml';
-      buffer = canvas.toBuffer('image/svg+xml');
-    }
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}.${ext}"`);
-    res.send(buffer);
+    parsed = schema.parse(req.body);
   } catch (err) {
-    console.error('Image generation error:', err);
-    res.status(500).json({ error: 'Server error' });
+    return res.status(400).json({ error: 'Invalid input', details: err.errors });
+  }
+
+  // Check API key
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== process.env.API_KEY) {
+    return res.status(403).json({ error: 'Forbidden: Invalid API key' });
+  }
+
+  const {
+    bgColor = '#000000',
+    textColor = '#ffffff',
+    texts = [],
+    fontFamily = 'Bell MT',
+    fontSize = 48,
+    width,
+    height,
+    format = 'svg',
+    filename = 'output'
+  } = parsed;
+
+  const svgTexts = texts.map(t => {
+    const x = t.x || '50%';
+    const y = t.y || '50%';
+    const content = decodeEntities(t.content || '');
+    return `<text x="${x}" y="${y}" text-anchor="middle" fill="${textColor}" font-family="${fontFamily}" font-size="${fontSize}" dominant-baseline="middle">${content}</text>`;
+  }).join('\n');
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  ${fontStyleBlock}
+  <rect width="100%" height="100%" fill="${bgColor}" />
+  ${svgTexts}
+</svg>`.trim();
+
+  if (format === 'svg') {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    return res.send(svg);
+  }
+
+  try {
+    const buffer = Buffer.from(svg);
+    const image = sharp(buffer).resize(width, height);
+    const imgBuffer = await image.toFormat(format).toBuffer();
+    res.setHeader('Content-Type', `image/${format}`);
+    res.send(imgBuffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to render image' });
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('Placeholder Image API is running securely.');
+// All other routes forbidden
+app.all('*', (req, res) => {
+  res.status(403).json({ error: 'Forbidden' });
 });
 
-app.listen(port, () => {
-  console.log(`Secure Image API running on port ${port}`);
-});
+// Start server
+app.listen(3000, () => console.log('Server running at http://localhost:3000'));
