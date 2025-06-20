@@ -14,6 +14,7 @@ const port = process.env.PORT || 4000;
 app.use(helmet());
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10kb' }));
+app.set('trust proxy', 1); // Trust first proxy
 
 // Rate limiter
 app.use(rateLimit({
