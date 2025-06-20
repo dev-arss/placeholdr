@@ -3,6 +3,8 @@ const express = require('express');
 const { createCanvas } = require('canvas');
 const rateLimit = require('express-rate-limit');
 
+registerFont('./fonts/bell-mt.ttf', { family: 'Bell MT' });
+
 const app = express();
 const port = process.env.PORT || 3000;
 const apiKey = process.env.API_KEY
