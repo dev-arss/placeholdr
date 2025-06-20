@@ -3,6 +3,7 @@ const express = require('express');
 const { createCanvas, registerFont } = require('canvas');
 const rateLimit = require('express-rate-limit');
 
+// Register Bell MT font if available
 registerFont('./fonts/bell-mt.ttf', { family: 'Bell MT' });
 
 const app = express();
@@ -30,26 +31,17 @@ app.use((req, res, next) => {
 });
 
 // 3. API Key Middleware
-app.use((req, res, next) => {
-  if (req.method === 'POST' && req.path === '/generate') {
-    const userKey = req.headers['x-api-key'];
-    if (!apiKey || !userKey || userKey !== apiKey) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+app.post('/generate', (req, res, next) => {
+  const userKey = req.headers['x-api-key'];
+  if (!userKey || userKey !== apiKey) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
-});
-
-// 4. Image Generator Endpoint
-app.post('/generate', (req, res) => {
+}, (req, res) => {
   try {
     const {
-      fontFamily = 'Arial',
-      fontSize = 24,
-      textColor = '#000000',
+      texts = [],
       bgColor = '#ffffff',
-      text = 'Hello<br>World!',
-      placement = 'center',
       width = 800,
       height = 400,
       format = 'svg',
@@ -58,7 +50,6 @@ app.post('/generate', (req, res) => {
 
     const safeWidth = Math.min(width, 1000);
     const safeHeight = Math.min(height, 1000);
-    const safeFontSize = Math.min(Math.max(fontSize, 8), 72);
     const isSVG = format.toLowerCase() === 'svg';
 
     const canvas = createCanvas(safeWidth, safeHeight, isSVG ? 'svg' : undefined);
@@ -67,47 +58,59 @@ app.post('/generate', (req, res) => {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, safeWidth, safeHeight);
 
-    ctx.font = `${safeFontSize}px ${fontFamily}`;
-    ctx.fillStyle = textColor;
-
-    const lines = text.split(/<br\s*\/?>/i);
-    const lineHeight = safeFontSize * 1.2;
-    const textHeight = lines.length * lineHeight;
     const padding = 20;
 
-    let x = 0, y = 0;
+    texts.forEach((textBlock) => {
+      const {
+        text = '',
+        fontFamily = 'Arial',
+        fontSize = 24,
+        textColor = '#000000',
+        placement = 'center'
+      } = textBlock;
 
-    switch (placement) {
-      case 'top-left':
-        x = padding;
-        y = padding + safeFontSize;
-        ctx.textAlign = 'left';
-        break;
-      case 'top-right':
-        x = safeWidth - padding;
-        y = padding + safeFontSize;
-        ctx.textAlign = 'right';
-        break;
-      case 'bottom-left':
-        x = padding;
-        y = safeHeight - textHeight - padding + safeFontSize;
-        ctx.textAlign = 'left';
-        break;
-      case 'bottom-right':
-        x = safeWidth - padding;
-        y = safeHeight - textHeight - padding + safeFontSize;
-        ctx.textAlign = 'right';
-        break;
-      case 'center':
-      default:
-        x = safeWidth / 2;
-        y = (safeHeight - textHeight) / 2 + safeFontSize;
-        ctx.textAlign = 'center';
-        break;
-    }
+      const safeFontSize = Math.min(Math.max(fontSize, 8), 72);
+      const lines = typeof text === 'string' ? text.split(/<br\s*\/?>/i) : text;
+      const lineHeight = safeFontSize * 1.2;
+      const textHeight = lines.length * lineHeight;
 
-    lines.forEach((line, i) => {
-      ctx.fillText(line, x, y + i * lineHeight);
+      ctx.font = `${safeFontSize}px ${fontFamily}`;
+      ctx.fillStyle = textColor;
+
+      let x = 0, y = 0;
+
+      switch (placement) {
+        case 'top-left':
+          x = padding;
+          y = padding + safeFontSize;
+          ctx.textAlign = 'left';
+          break;
+        case 'top-right':
+          x = safeWidth - padding;
+          y = padding + safeFontSize;
+          ctx.textAlign = 'right';
+          break;
+        case 'bottom-left':
+          x = padding;
+          y = safeHeight - textHeight - padding + safeFontSize;
+          ctx.textAlign = 'left';
+          break;
+        case 'bottom-right':
+          x = safeWidth - padding;
+          y = safeHeight - textHeight - padding + safeFontSize;
+          ctx.textAlign = 'right';
+          break;
+        case 'center':
+        default:
+          x = safeWidth / 2;
+          y = (safeHeight - textHeight) / 2 + safeFontSize;
+          ctx.textAlign = 'center';
+          break;
+      }
+
+      lines.forEach((line, i) => {
+        ctx.fillText(line, x, y + i * lineHeight);
+      });
     });
 
     let contentType = '';
@@ -121,10 +124,13 @@ app.post('/generate', (req, res) => {
       contentType = 'image/jpeg';
       ext = 'jpg';
       buffer = canvas.toBuffer('image/jpeg');
-    } else {
+    } else if (ext === 'png') {
       contentType = 'image/png';
       ext = 'png';
       buffer = canvas.toBuffer('image/png');
+    } else {
+      contentType = 'image/svg+xml';
+      buffer = canvas.toBuffer('image/svg+xml');
     }
 
     res.setHeader('Content-Type', contentType);
