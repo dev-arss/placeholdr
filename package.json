@@ -1,0 +1,15 @@
+{
+  "name": "secure-placeholder-image-api",
+  "version": "1.0.0",
+  "description": "Secure API to generate placeholder images with text",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js"
+  },
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.0.0",
+    "dotenv": "^16.4.5"
+  }
+}
