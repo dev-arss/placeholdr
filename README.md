@@ -23,8 +23,23 @@ curl -X POST http://localhost:3000/generate \
   -H "x-api-key: mysecret" \
   -o image.png \
   -d '{
-    "text": "Hello<br>Secure World!",
-    "filename": "secure",
-    "format": "png"
+    "filename": "custom-image",
+    "format": "png",
+    "texts": [
+      {
+        "text": "Main Title",
+        "fontFamily": "Bell MT",
+        "fontSize": 32,
+        "textColor": "#FF5733",
+        "placement": "top-left"
+      },
+      {
+        "text": ["Line One", "Line Two"],
+        "fontFamily": "Arial",
+        "fontSize": 20,
+        "textColor": "#333333",
+        "placement": "bottom-right"
+      }
+    ]
   }'
 ```
