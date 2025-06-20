@@ -1,6 +1,6 @@
 require("dotenv").config();
 const express = require('express');
-const { createCanvas } = require('canvas');
+const { createCanvas, registerFont } = require('canvas');
 const rateLimit = require('express-rate-limit');
 
 registerFont('./fonts/bell-mt.ttf', { family: 'Bell MT' });
