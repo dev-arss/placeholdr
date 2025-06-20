@@ -103,6 +103,7 @@ Content-Type: application/json
   "texts": [
     {
       "content": "Healing isn’t <em>linear</em>.",
+      "fontSize": "36",
       "x": "50%",
       "y": "40%"
     },

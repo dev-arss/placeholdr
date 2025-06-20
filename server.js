@@ -62,6 +62,7 @@ const schema = z.object({
   filename: z.string().optional(),
   texts: z.array(z.object({
     content: z.string().min(1).max(1000),
+    fontSize: z.number().min(1).max(200).optional(),
     x: z.string().optional(),
     y: z.string().optional()
   }))
@@ -107,7 +108,8 @@ app.post('/generate', async (req, res) => {
     const x = t.x || '50%';
     const y = t.y || '50%';
     const content = decodeEntities(t.content || '');
-    return `<text x="${x}" y="${y}" text-anchor="middle" fill="${textColor}" font-family="${fontFamily}" font-size="${fontSize}" dominant-baseline="middle">${content}</text>`;
+    const size = t.fontSize || fontSize; // fallback to global fontSize
+    return `<text x="${x}" y="${y}" text-anchor="middle" fill="${textColor}" font-family="${fontFamily}" font-size="${size}" dominant-baseline="middle">${content}</text>`;
   }).join('\n');
 
   const svg = `
