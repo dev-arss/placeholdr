@@ -109,7 +109,7 @@ app.post('/generate', async (req, res) => {
     const y = t.y || '50%';
     const content = decodeEntities(t.content || '');
     const size = t.fontSize || fontSize; // fallback to global fontSize
-    return `<text x="${x}" y="${y}" text-anchor="middle" fill="${textColor}" font-family="${fontFamily}" font-size="${size}" dominant-baseline="middle">${content}</text>`;
+    return `<text x="${x}" y="${y}" text-anchor="left" fill="${textColor}" font-family="${fontFamily}" font-size="${size}" dominant-baseline="middle">${content}</text>`;
   }).join('\n');
 
   const svg = `
